@@ -517,8 +517,9 @@ public class StackUtils {
 	public static List<Map> packageStackMaps(List<Map> stacks) {
 		ArrayList<Map> newStacks = new ArrayList<Map>();
 		ArrayList<String> versions = null;
-		String saveName = null;
+		String saveName = "";
 		for (Map stack : stacks) {
+			System.out.println("one stack: "+stack.toString());
 			String name = (String) stack.get("name");
 			// append versions and desiredStates to stack
 			if (name.contentEquals(saveName)) {
@@ -531,7 +532,7 @@ public class StackUtils {
 				HashMap map = new HashMap();
 				map.put("versions",versions);
 				map.put("name",name);
-				map.put("image",stack.get("image"));
+				map.put("images",stack.get("images"));
 				versions.add((String) stack.get("version"));
 				newStacks.add(map);
 			}
@@ -543,7 +544,7 @@ public class StackUtils {
 		ArrayList<Stack> newStacks = new ArrayList<Stack>();
 		ArrayList<StackSpecVersions> versions = null;
 		StackSpec stackSpec = null;
-		String saveName = null;
+		String saveName = "";
 		for (Map stack : stacks) {
 			String name = (String) stack.get("name");
 			// append versions and desiredStates to stack
