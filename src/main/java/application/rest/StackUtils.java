@@ -284,9 +284,9 @@ public class StackUtils {
 				String name = s.getMetadata().getName();
 				name = name.trim();
 				List<StackStatusVersions> versions = s.getStatus().getVersions();
-				HashMap versionMap = new HashMap();
 				List<Map> status = new ArrayList<Map>();
 				for (StackStatusVersions stackStatusVersion : versions) {
+					HashMap versionMap = new HashMap();
 					versionMap.put("status", stackStatusVersion.getStatus());
 					versionMap.put("version", stackStatusVersion.getVersion());
 					status.add(versionMap);
@@ -331,12 +331,13 @@ public class StackUtils {
 		return inActiveCollections;
 	}
 	
+	
+	
 
 	public static List filterNewStacks(List<Map> fromGit, StackList fromKabanero) {
 		ArrayList<Map> newStacks = new ArrayList<Map>();
-
+		ArrayList<Map> registerVersionForName = new ArrayList<Map>();
 		try {
-			List<Map> kabMaps = multiVersionStacksMaps(fromKabanero);
 			for (Map map : fromGit) {
 				String name = (String) map.get("id");
 				String version = (String) map.get("version");
@@ -344,12 +345,26 @@ public class StackUtils {
 				version = version.trim();
 				boolean match = false;
 				HashMap gitMap = new HashMap();
-				for (Map kab: kabMaps) {
-					String name1 = (String) kab.get("name");
-					String version1 = (String) kab.get("version");
+				// check this git map against all of the kab stacks
+				for (Stack kabStack : fromKabanero.getItems()) {
+					String name1 = (String) kabStack.getSpec().getName();
+					List<StackStatusVersions> versions = kabStack.getStatus().getVersions();
 					name1 = name1.trim();
-					if (name1.contentEquals(name) && version1.contentEquals(version)) {
-						match = true;
+					// see if name from git matches name from kabanero
+					// there can be multiple git maps that have the same name but different versions
+					if (name1.contentEquals(name)) {
+						System.out.println("name="+name+",git version="+version+",versions="+versions);
+						// check if the version from the git map occurs in the list of versions
+						// for this name matched stack map
+						for (StackStatusVersions stackStatusVersions : versions) {
+							if (version.contentEquals(stackStatusVersions.getVersion())) {
+								match = true;
+								HashMap versionForName = new HashMap();
+								versionForName.put(name, version);
+								registerVersionForName.add(versionForName);
+								break;
+							}
+						}
 					}
 				}
 				if (!match) {
@@ -358,6 +373,26 @@ public class StackUtils {
 					gitMap.put("desiredState", "active");
 					gitMap.put("images", map.get("images"));
 					newStacks.add(gitMap);
+				}
+			}
+			System.out.println("newStacks: "+newStacks);
+			System.out.println("registerVersionForName: "+registerVersionForName);
+			// clean new stacks of any versions that were added extraneously
+			for (Map newStack:newStacks) {
+				boolean versionAlreadyThereFromGit = false;
+				String name = (String) newStack.get("name");
+				for (Map versionForName:registerVersionForName) {
+					String version = (String) versionForName.get(name);
+					String newStackVersion = (String) newStack.get("version");
+					if (version!=null) {
+						if (version.contentEquals(newStackVersion)) {
+							versionAlreadyThereFromGit=true;
+						}
+					}
+				}
+				if (versionAlreadyThereFromGit) {
+					System.out.println("removing: "+newStack);
+					newStacks.remove(newStack);
 				}
 			}
 		} catch (Exception e) {
@@ -387,6 +422,7 @@ public class StackUtils {
 							activateMap.put("name", map.get("id"));
 							activateMap.put("version", stackVersion.getVersion());
 							activateMap.put("desiredState","active");
+							activateMap.put("images", map.get("images"));
 							activateCollections.add(activateMap);
 						}
 					}
@@ -414,20 +450,16 @@ public class StackUtils {
 		return kabMaps;
 	}
 	
-//	public static List countSingleVersionDeletedStacks(List<Map> stacksToDelete) {
-//		for(Map stack : stacksToDelete) {
-//			String name = (String) stack.get("name");
-//			int i=0;
-//			for(Map stack2 : stacksToDelete) {
-//				String name2 = (String) stack2.get("name");
-//				if (name.contentEquals(name2)) {
-//					i++;
-//				}
-//			}
-//			stack.put("count", i);
-//		}
-//		return null;
-//	}
+	public static List<StackSpecVersions> getKabInstanceVersions(StackList fromKabanero, String name) {
+		for (Stack s : fromKabanero.getItems()) {
+			if (s.getSpec().getName().contentEquals(name)) {
+				return s.getSpec().getVersions();
+			}
+		}
+		return null;
+	}
+	
+
 	
 	public static List isVerionInGitForStack(List<Map> fromGit, List<Map> stacksToDelete) {
 		
@@ -444,33 +476,71 @@ public class StackUtils {
 		}
 		return null;
 	}
+	
+	
+	public static boolean isStackVersionInGit(List<Map> fromGit, String version, String name) {
+		System.out.println("isStackVersionInGit");
+		System.out.println("input parms - name: "+name+" version: "+version);
+		try {
+			for (Map map1 : fromGit) {
+				String name1 = (String) map1.get("name");
+				name1 = name1.trim();
+				if (name1.contentEquals(name)) {
+					List<String> versions = (List<String>) map1.get("versions");
+					System.out.println("versions: "+versions);
+					for (String versionElement:versions) {
+						if (version.equals(versionElement)) {
+							return true;
+						}
+					}
+						
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
 
 	public static List filterDeletedStacks(List<Map> fromGit, StackList fromKabanero) {
 		ArrayList<Map> stacksToDelete = new ArrayList<Map>();
 		String name = null;
 		String version = null;
+		boolean stackInGit;
+		boolean match;
 		try {
-			List<Map> kabMaps = multiVersionStacksMaps(fromKabanero);
-			for (Map kab: kabMaps) {
-				//System.out.println("kab map: " + kab);
-				name = (String) kab.get("name");
-				version = (String) kab.get("version");
-				boolean match = false;
+			for (Stack kabStack: fromKabanero.getItems()) {
 				Map kabMap = new HashMap();
-				// is this Kabanero CR version in GIT hub?
+				match = false;
+				stackInGit = false;
 				for (Map map1 : fromGit) {
 					String name1 = (String) map1.get("id");
 					name1 = name1.trim();
 					String version1 = (String) map1.get("version");
-					name1 = name1.trim();
-					if (name1.contentEquals(name) && version1.contentEquals(version)) {
-						match = true;
-					}
+					name = (String) kabStack.getSpec().getName();
+					if (name1.contentEquals(name)) {
+						stackInGit=true;
+						StackStatus status = kabStack.getStatus();
+						List<StackStatusVersions> stackVersions = status.getVersions();
+						// If this Kabanero Stack version does not match GIT hub stack version, add it for deletion 
+						for (StackStatusVersions stackVersion:stackVersions) {
+							// if this version is 
+							if (version1.equals(stackVersion.getVersion())) {
+								version=version1;
+								match=true;
+								break;
+							}
+						}
+						if (!match) {
+							kabMap.put("name", name);
+							kabMap.put("version",version);
+							stacksToDelete.add(kabMap);
+						}
+					} 
 				}
-				// if this version is not in GIT hub add it to map element for deletion
-				if (!match) {
+				if (!stackInGit) {
 					kabMap.put("name", name);
-					kabMap.put("version", version);
+					kabMap.put("version","");
 					stacksToDelete.add(kabMap);
 				}
 			}
@@ -515,11 +585,11 @@ public class StackUtils {
 	}
 	
 	public static List<Map> packageStackMaps(List<Map> stacks) {
-		ArrayList<Map> newStacks = new ArrayList<Map>();
+		ArrayList<Map> updatedStacks = new ArrayList<Map>();
 		ArrayList<String> versions = null;
 		String saveName = "";
 		for (Map stack : stacks) {
-			System.out.println("one stack: "+stack.toString());
+			System.out.println("packageStackMaps one stack: "+stack.toString());
 			String name = (String) stack.get("name");
 			// append versions and desiredStates to stack
 			if (name.contentEquals(saveName)) {
@@ -534,19 +604,25 @@ public class StackUtils {
 				map.put("name",name);
 				map.put("images",stack.get("images"));
 				versions.add((String) stack.get("version"));
-				newStacks.add(map);
+				updatedStacks.add(map);
 			}
 		}
-		return newStacks;
+		return updatedStacks;
 	}
 	
+	
+	
 	public static List<Stack> packageStackObjects(List<Map> stacks, Map versionedStackMap) {
-		ArrayList<Stack> newStacks = new ArrayList<Stack>();
+		ArrayList<Stack> updateStacks = new ArrayList<Stack>();
 		ArrayList<StackSpecVersions> versions = null;
 		StackSpec stackSpec = null;
 		String saveName = "";
+		System.out.println("versionedStackMap: "+versionedStackMap);
 		for (Map stack : stacks) {
+			System.out.println("packageStackObjects one stack: "+stack);
 			String name = (String) stack.get("name");
+			String version = (String) stack.get("version");
+			System.out.println("packageStackObjects version="+version);
 			// append versions and desiredStates to stack
 			if (name.contentEquals(saveName)) {
 				StackSpecVersions specVersion = new StackSpecVersions();
@@ -562,19 +638,20 @@ public class StackUtils {
 				stackSpec.setVersions(versions);
 				stackSpec.setName(name);
 				Stack stackObj = new Stack();
+				stackObj.setKind("Stack");
 				stackObj.setSpec(stackSpec);
 				StackSpecVersions specVersion = new StackSpecVersions();
 				specVersion.setDesiredState("active");
-				specVersion.setVersion((String) stack.get("version"));
+				specVersion.setVersion(version);
 				specVersion.setImages((List<StackSpecImages>) stack.get("images"));
 				
 				specVersion.setPipelines((List<StackSpecPipelines>) versionedStackMap.get(name));
-				
+				System.out.println("packageStackObjects one specVersion: "+specVersion);
 				versions.add(specVersion);
-				newStacks.add(stackObj);
+				updateStacks.add(stackObj);
 			}
 		}
-		return newStacks;
+		return updateStacks;
 	}
 
 	
