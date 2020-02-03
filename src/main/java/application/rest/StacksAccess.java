@@ -430,7 +430,7 @@ public class StacksAccess {
 					List<StackSpecVersions> kabSpecVersions=StackUtils.getKabInstanceVersions(fromKabanero, s.getSpec().getName());
 					if (kabSpecVersions!=null) {
 						updateType="patch";
-						s.getSpec().getVersions().addAll(s.getSpec().getVersions());
+						s.getSpec().getVersions().addAll(kabSpecVersions);
 						System.out.println(s.getSpec().getName()+" stack for patch create: " + s.toString());
 						api.updateStack(namespace, s.getMetadata().getName(), s);
 					} else {
@@ -588,6 +588,7 @@ public class StacksAccess {
 					
 					if (atLeastOneToDelete) {
 						deletedStacks.add(m);
+						// if there is more than one version in the stack and the number of versions to delete is not equal to the total number of versions
 						if (statusStackVersions.size() > 1  &&  versions.size()!=statusStackVersions.size()) {
 							System.out.println(s.getSpec().getName()+" delete stack versions deleted: "+versions+" through omission, stack: "+stackObj);
 							api.updateStack(namespace, s.getSpec().getName(), stackObj);
