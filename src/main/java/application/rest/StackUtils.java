@@ -459,6 +459,15 @@ public class StackUtils {
 		return null;
 	}
 	
+	public static Stack getKabInstance(StackList fromKabanero, String name) {
+		for (Stack s : fromKabanero.getItems()) {
+			if (s.getSpec().getName().contentEquals(name)) {
+				return s;
+			}
+		}
+		return null;
+	}
+	
 
 	
 	public static List isVerionInGitForStack(List<Map> fromGit, List<Map> stacksToDelete) {
@@ -486,15 +495,15 @@ public class StackUtils {
 				String name1 = (String) map1.get("name");
 				name1 = name1.trim();
 				if (name1.contentEquals(name)) {
-					List<String> versions = (List<String>) map1.get("versions");
+					List<Map> versions = (List<Map>) map1.get("versions");
 					System.out.println("versions: "+versions);
-					for (String versionElement:versions) {
-						if (version.equals(versionElement)) {
+					for (Map versionElement:versions) {
+						String versionValue = (String) versionElement.get("version");
+						if (version.equals(versionValue)) {
 							return true;
 						}
 					}
-						
-				}
+				} 
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -633,6 +642,8 @@ public class StackUtils {
 				StackSpecVersions specVersion = new StackSpecVersions();
 				specVersion.setDesiredState("active");
 				specVersion.setVersion((String) stack.get("version"));
+				specVersion.setImages((List<StackSpecImages>) stack.get("images"));
+				specVersion.setPipelines((List<StackSpecPipelines>) versionedStackMap.get(name));
 				versions.add(specVersion);
 			} 
 			// creating stack object to add to new stacks List

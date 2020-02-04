@@ -379,7 +379,7 @@ public class StacksAccess {
 			curatedStacks = StackUtils.packageStackMaps(curatedStacks);
 			
 			System.out.println(" ");
-			System.out.println("*** List of curated stacks= "+stacks);
+			System.out.println("*** List of curated stacks= "+curatedStacks);
 			
 			System.out.println(" ");
 			System.out.println(" ");
@@ -431,8 +431,13 @@ public class StacksAccess {
 					if (kabSpecVersions!=null) {
 						updateType="patch";
 						s.getSpec().getVersions().addAll(kabSpecVersions);
+						
+						Stack kabStack = StackUtils.getKabInstance(fromKabanero, s.getSpec().getName());
+						
+						kabStack.getSpec().setVersions(s.getSpec().getVersions());
+						
 						System.out.println(s.getSpec().getName()+" stack for patch create: " + s.toString());
-						api.updateStack(namespace, s.getMetadata().getName(), s);
+						api.updateStack(namespace, s.getMetadata().getName(), kabStack);
 					} else {
 						updateType="create";
 						System.out.println(s.getSpec().getName()+" stack for just create: " + s.toString());
@@ -479,7 +484,8 @@ public class StacksAccess {
 					V1ObjectMeta metadata = new V1ObjectMeta().name((String)s.getSpec().getName()).namespace(namespace).addOwnerReferencesItem(owner);
 					stackObj.setMetadata(metadata);
 					stackObj.setApiVersion(apiVersion);
-
+					stackObj.getMetadata().setUid(s.getMetadata().getUid());
+					stackObj.getMetadata().setGeneration(s.getMetadata().getGeneration());
 					stackSpec.setVersions(stackSpecVersions);
 
 					stackSpec.setName(s.getSpec().getName());
@@ -555,6 +561,8 @@ public class StacksAccess {
 					V1ObjectMeta metadata = new V1ObjectMeta().name((String)kabStack.getSpec().getName()).namespace(namespace).addOwnerReferencesItem(owner);
 					stackObj.setMetadata(metadata);
 					stackObj.setApiVersion(apiVersion);
+					stackObj.getMetadata().setUid(kabStack.getMetadata().getUid());
+					stackObj.getMetadata().setGeneration(kabStack.getMetadata().getGeneration());
 
 					stackSpec.setVersions(stackSpecVersions);
 
@@ -563,7 +571,8 @@ public class StacksAccess {
 					List<StackStatusVersions> kabStackVersions=kabStack.getStatus().getVersions();
 					boolean atLeastOneToDelete=false;
 
-					System.out.println("Kab stack versions"+kabStackVersions);
+					System.out.println("Kab stack versions: "+kabStackVersions);
+					
 					for (StackStatusVersions statusStackVersion:kabStackVersions) {
 						System.out.println("statusStackVersion: "+statusStackVersion.getStatus()+" name: "+kabStack.getSpec().getName());
 
@@ -582,23 +591,27 @@ public class StacksAccess {
 							versions.add(statusStackVersion.getVersion());
 						}
 					}
+					
+					kabStack.getSpec().setVersions(stackSpecVersions);
 					m.put("name", kabStack.getSpec().getName());
 					m.put("versions", versions);
 					
-					System.out.println("name: "+kabStack.getSpec().getName()+" atLeastOneVersionToActivate="+atLeastOneToDelete);
+					System.out.println("name: "+kabStack.getSpec().getName()+" atLeastOneVersionToDelete="+atLeastOneToDelete);
 					stackObj.getSpec().setVersions(stackSpecVersions);
 					
 					if (atLeastOneToDelete) {
 						deletedStacks.add(m);
 						// if there is more than one version in the stack and the number of versions to delete is not equal to the total number of versions
 						if (kabStackVersions.size() > 1  &&  versions.size()!=kabStackVersions.size()) {
-							System.out.println(kabStack.getSpec().getName()+" delete stack versions deleted: "+versions+" through omission, stack: "+stackObj);
-							api.updateStack(namespace, kabStack.getSpec().getName(), stackObj);
+							System.out.println(kabStack.getSpec().getName()+" delete stack versions deleted: "+versions+" through omission, stack: "+kabStack);
+							api.updateStack(namespace, kabStack.getSpec().getName(), kabStack);
 						} else {
 							System.out.println("delete entrire stack: "+kabStack.getSpec().getName()+", because there is only one version in it or all versions are to be deleted ");
 							api.deleteStack(namespace, kabStack.getSpec().getName(), null, null, null, null);
 						}
-						System.out.println("*** status: "+kabStack.getMetadata().getName()+" versions(s): "+versions + " activated");
+						System.out.println("*** status: "+kabStack.getMetadata().getName()+" versions(s): "+versions + " deleted");
+					} else {
+						System.out.println("Skipping: "+kabStack.getSpec().getName()+" nothing to delete");
 					}
 				} catch (Exception e) {
 					System.out.println("exception cause: " + e.getCause());
